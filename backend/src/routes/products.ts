@@ -94,10 +94,30 @@ router.post('/', async (req: Request, res: Response) => {
 router.get('/', async (_req: Request, res: Response) => {
   try {
     const docs = await ProductModel.find().sort({ createdAt: -1 }).lean();
+    const ids = docs.map((d: any) => d._id);
+    const latestBatches = await ProductBatchModel.aggregate([
+      { $match: { productId: { $in: ids } } },
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id: '$productId',
+          batchNo: { $first: '$batchNo' },
+          expiryDate: { $first: '$expiryDate' },
+        },
+      },
+    ]);
+    const batchByProduct = new Map<string, { batchNo: string; expiryDate?: string }>();
+    for (const b of latestBatches) {
+      batchByProduct.set(String(b._id), {
+        batchNo: b?.batchNo ? String(b.batchNo) : '',
+        expiryDate: b?.expiryDate ? new Date(b.expiryDate).toISOString().slice(0, 10) : '',
+      });
+    }
     const products = docs.map((d: any) => {
       const expiry = d.expiryDate ? new Date(d.expiryDate) : undefined;
       const mfg = d.manufacturingDate ? new Date(d.manufacturingDate) : undefined;
       const yyyyMmDd = (dt?: Date) => (dt ? dt.toISOString().slice(0, 10) : '');
+      const lb = batchByProduct.get(String(d._id));
       return {
         id: String(d._id),
         productId: d.productId || '',
@@ -112,6 +132,8 @@ router.get('/', async (_req: Request, res: Response) => {
         unitsPerStrip: typeof (d as any).unitsPerStrip === 'number' ? (d as any).unitsPerStrip : 0,
         stripPrice: typeof (d as any).stripPrice === 'number' ? (d as any).stripPrice : 0,
         batchNo: d.batchNo || '',
+        latestBatchNo: lb?.batchNo || '',
+        latestBatchExpiry: lb?.expiryDate || '',
         expiryDate: yyyyMmDd(expiry),
         manufacturingDate: yyyyMmDd(mfg),
         mrp: typeof d.mrp === 'number' ? d.mrp : 0,

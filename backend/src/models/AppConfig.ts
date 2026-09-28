@@ -23,3 +23,29 @@ const AppConfigSchema = new Schema(
 export type AppConfigDoc = InferSchemaType<typeof AppConfigSchema> & { _id: string };
 
 export const AppConfigModel = mongoose.models.AppConfig || mongoose.model('AppConfig', AppConfigSchema);
+
+export function computeNextInvoiceNumber(current: string) {
+  const s = String(current || '').trim();
+  if (!s) return '2024-00001';
+  const m = s.match(/^(.*?)(\d+)$/);
+  if (!m) return s;
+  const base = m[1] || '';
+  const numStr = m[2] || '';
+  const next = Math.max(0, Number(numStr) || 0) + 1;
+  const padded = String(next).padStart(numStr.length, '0');
+  return `${base}${padded}`;
+}
+
+export function buildInvoiceNo(opts: { invoicePrefix?: string; nextInvoiceNumber?: string }) {
+  const prefix = String(opts.invoicePrefix || 'INV-');
+  const series = String(opts.nextInvoiceNumber || '2024-00001').trim();
+  if (!series) return prefix + '2024-00001';
+  if (series.startsWith(prefix)) return series;
+  return `${prefix}${series}`;
+}
+
+export async function ensureAppConfig() {
+  const existing = await AppConfigModel.findOne();
+  if (existing) return existing;
+  return AppConfigModel.create({});
+}

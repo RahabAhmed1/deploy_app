@@ -79,6 +79,9 @@ const DeliverySchema = new Schema(
     proofs: { type: [ProofSchema], default: [] },
 
     cashCollected: { type: Number, default: 0 },
+
+    cashCustomerPaymentId: { type: Schema.Types.ObjectId, required: false },
+    cashSupplierPaymentId: { type: Schema.Types.ObjectId, required: false },
   },
   { timestamps: true }
 );

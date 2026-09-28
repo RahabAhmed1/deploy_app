@@ -2,16 +2,13 @@ import { Router, type Request, type Response } from 'express';
 import { InvoiceModel } from '../models/Invoice';
 import { OrderModel } from '../models/Order';
 import { PaymentModel } from '../models/Payment';
+import { buildInvoiceNo, computeNextInvoiceNumber, ensureAppConfig } from '../models/AppConfig';
 
 const router = Router();
 
-function genInvoiceNo() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  const rand = Math.floor(Math.random() * 900 + 100);
-  return `INV-${y}${m}${day}-${rand}`;
+function toNum(value: any, fallback: number) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 // List invoices with payment-derived status
@@ -77,12 +74,21 @@ router.post('/', async (req: Request, res: Response) => {
     const existing = await InvoiceModel.findOne({ orderId });
     if (existing) return res.status(400).json({ ok: false, error: 'Invoice already exists for this order' });
 
+    const cfg: any = await ensureAppConfig();
+    const defaultTerms = typeof (cfg as any).paymentTermsDays === 'number' ? Number((cfg as any).paymentTermsDays) : 30;
+
     const invoiceDate = body.invoiceDate ? new Date(body.invoiceDate) : new Date();
-    const terms = body.paymentTermsDays !== undefined ? Number(body.paymentTermsDays) : 30;
+    const terms = body.paymentTermsDays !== undefined ? toNum(body.paymentTermsDays, defaultTerms) : defaultTerms;
     const dueDate = body.dueDate ? new Date(body.dueDate) : new Date(invoiceDate.getTime() + terms * 24 * 60 * 60 * 1000);
 
+    const providedInvoiceNo = body.invoiceNo ? String(body.invoiceNo) : '';
+    const shouldAllocate = !providedInvoiceNo;
+    const invoiceNo = shouldAllocate
+      ? buildInvoiceNo({ invoicePrefix: (cfg as any).invoicePrefix, nextInvoiceNumber: (cfg as any).nextInvoiceNumber })
+      : providedInvoiceNo;
+
     const doc = await InvoiceModel.create({
-      invoiceNo: body.invoiceNo || genInvoiceNo(),
+      invoiceNo,
       orderId: orderId,
       orderNo: (order as any).orderNo,
       customerId: (order as any).customerId,
@@ -100,6 +106,11 @@ router.post('/', async (req: Request, res: Response) => {
       paymentTermsDays: terms,
       notes: body.notes,
     });
+
+    if (shouldAllocate) {
+      (cfg as any).nextInvoiceNumber = computeNextInvoiceNumber(String((cfg as any).nextInvoiceNumber || '2024-00001'));
+      await (cfg as any).save();
+    }
 
     res.status(201).json({ ok: true, invoice: doc });
   } catch (err: any) {

@@ -96,7 +96,7 @@ router.get('/', async (_req: Request, res: Response) => {
     if (!me) return res.status(401).json({ ok: false, error: 'Unauthorized' });
 
     if (me.role === 'admin') {
-      const users = await UserModel.find().sort({ createdAt: -1 }).lean();
+      const users = await UserModel.find({ $nor: [{ role: 'rider', supplierId: { $exists: true, $ne: null } }] }).sort({ createdAt: -1 }).lean();
       return res.json({ ok: true, users: users.map(normalize) });
     }
 
@@ -159,9 +159,7 @@ router.post('/', async (req: Request, res: Response) => {
         : normalizedRole === 'rider'
           ? me.role === 'supplier'
             ? me.supplierId
-            : supplierId
-              ? String(supplierId)
-              : undefined
+            : undefined
           : undefined;
 
     const supplierNameToSet =
@@ -172,9 +170,7 @@ router.post('/', async (req: Request, res: Response) => {
         : normalizedRole === 'rider'
           ? me.role === 'supplier'
             ? me.supplierName
-            : supplierName
-              ? String(supplierName)
-              : undefined
+            : undefined
           : undefined;
 
     if (normalizedRole === 'supplier' && !supplierIdToSet) {

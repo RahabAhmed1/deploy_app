@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { OrderModel } from '../models/Order';
 import { InvoiceModel } from '../models/Invoice';
-import { AppConfigModel } from '../models/AppConfig';
+import { AppConfigModel, buildInvoiceNo, computeNextInvoiceNumber, ensureAppConfig } from '../models/AppConfig';
 import { CustomerModel } from '../models/Customer';
 import { PaymentModel } from '../models/Payment';
 import { ProductModel } from '../models/Product';
@@ -9,6 +9,7 @@ import { ProductBatchModel } from '../models/ProductBatch';
 import { StockMovementModel } from '../models/StockMovement';
 import jwt from 'jsonwebtoken';
 import { UserModel } from '../models/User';
+import { createNotification } from '../notify';
 
 const router = Router();
 
@@ -53,13 +54,9 @@ function genOrderNo() {
   return `ORD-${y}${m}${day}-${rand}`;
 }
 
-function genInvoiceNo(prefix = 'INV-') {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  const rand = Math.floor(Math.random() * 900 + 100);
-  return `${prefix}${y}${m}${day}-${rand}`;
+function toNum(value: any, fallback: number) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 // List orders
@@ -153,6 +150,10 @@ router.get('/:id', async (req: Request, res: Response) => {
 // Create order
 router.post('/', async (req: Request, res: Response) => {
   try {
+    const cfgDoc: any = await AppConfigModel.findOne().lean();
+    const defaultTaxRate = typeof cfgDoc?.defaultTaxRate === 'number' ? cfgDoc.defaultTaxRate : 12;
+    const creditLimitAlertEnabled = cfgDoc?.creditLimitAlertEnabled !== undefined ? !!cfgDoc.creditLimitAlertEnabled : true;
+
     const body = req.body || {};
     const customer = await CustomerModel.findById(body.customerId);
     if (!customer) return res.status(404).json({ ok: false, error: 'Customer not found' });
@@ -183,6 +184,7 @@ router.post('/', async (req: Request, res: Response) => {
       } else {
         batchNo = batchNo || (p?.batchNo || '');
       }
+      const tax = it.tax === undefined || it.tax === null || it.tax === '' ? defaultTaxRate : toNum(it.tax, 0);
       return {
         productId: it.productId,
         productName: it.productName || p?.name || '',
@@ -191,8 +193,8 @@ router.post('/', async (req: Request, res: Response) => {
         quantity: Number(it.quantity) || 0,
         unitPrice: Number(it.unitPrice) || 0,
         discount: Number(it.discount) || 0,
-        tax: Number(it.tax) || 0,
-        total: Number(it.total) || (Number(it.quantity||0) * Number(it.unitPrice||0) * (1 - Number(it.discount||0)/100) * (1 + Number(it.tax||0)/100)),
+        tax,
+        total: Number(it.total) || (Number(it.quantity||0) * Number(it.unitPrice||0) * (1 - Number(it.discount||0)/100) * (1 + Number(tax||0)/100)),
       };
     }));
 
@@ -269,6 +271,39 @@ router.post('/', async (req: Request, res: Response) => {
       accountsPosted: false,
     });
 
+    try {
+      const ct = String(customerType || (customer as any).type || '').toLowerCase();
+      const creditLimit = Number((customer as any).creditLimit || 0);
+      const outstanding = Number((customer as any).outstandingBalance || 0);
+      if (creditLimitAlertEnabled && ct !== 'walk_in' && creditLimit > 0 && outstanding + totals.net > creditLimit) {
+        const cid = String((customer as any)._id);
+        const name = String((customer as any).name || 'Customer');
+        await createNotification(
+          { toRole: 'admin' as any },
+          {
+            type: 'credit_limit',
+            title: 'Credit limit exceeded',
+            message: `${name} exceeded credit limit. Limit: ${creditLimit.toFixed(2)}, Outstanding: ${(outstanding + totals.net).toFixed(2)}.`,
+            entityType: 'customer',
+            entityId: cid,
+            dedupeKey: `credit_limit_admin_${cid}`,
+          }
+        );
+        await createNotification(
+          { toRole: 'staff' as any },
+          {
+            type: 'credit_limit',
+            title: 'Credit limit exceeded',
+            message: `${name} exceeded credit limit. Limit: ${creditLimit.toFixed(2)}, Outstanding: ${(outstanding + totals.net).toFixed(2)}.`,
+            entityType: 'customer',
+            entityId: cid,
+            dedupeKey: `credit_limit_staff_${cid}`,
+          }
+        );
+      }
+    } catch {
+    }
+
     // Increase customer outstanding by net amount only for non-deferred sales
     if (!deferredPosting && docType === 'sale' && !isWalkIn) {
       customer.outstandingBalance = Number(customer.outstandingBalance || 0) + totals.net;
@@ -307,15 +342,17 @@ router.post('/', async (req: Request, res: Response) => {
 
     // Auto-create invoice when enabled (only for non-deferred sales)
     try {
-      const cfg: any = await AppConfigModel.findOne().lean();
-      const auto = cfg?.autoGenerateInvoice !== false; // default true
+      const cfg = cfgDoc || (await AppConfigModel.findOne().lean());
+      const auto = cfg?.autoGenerateInvoice !== false;
       if (auto && !deferredPosting && docType === 'sale') {
-        const prefix = cfg?.invoicePrefix || 'INV-';
         const terms = typeof cfg?.paymentTermsDays === 'number' ? cfg.paymentTermsDays : 30;
         const invoiceDate = body.orderDate ? new Date(body.orderDate) : new Date();
         const dueDate = new Date(invoiceDate.getTime() + terms * 24 * 60 * 60 * 1000);
+
+        const cfgWritable: any = await ensureAppConfig();
+        const invoiceNo = buildInvoiceNo({ invoicePrefix: cfgWritable.invoicePrefix, nextInvoiceNumber: cfgWritable.nextInvoiceNumber });
         await InvoiceModel.create({
-          invoiceNo: genInvoiceNo(prefix),
+          invoiceNo,
           orderId: (doc as any)._id,
           orderNo: (doc as any).orderNo,
           customerId: (doc as any).customerId,
@@ -330,6 +367,9 @@ router.post('/', async (req: Request, res: Response) => {
           items: (doc as any).items || [],
           paymentTermsDays: terms,
         });
+
+        cfgWritable.nextInvoiceNumber = computeNextInvoiceNumber(String(cfgWritable.nextInvoiceNumber || '2024-00001'));
+        await cfgWritable.save();
       }
     } catch (e) {
       // Do not fail the order creation if invoice creation fails
@@ -640,12 +680,14 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
           const cfg: any = await AppConfigModel.findOne().lean();
           const auto = cfg?.autoGenerateInvoice !== false; // default true
           if (auto) {
-            const prefix = cfg?.invoicePrefix || 'INV-';
             const terms = typeof cfg?.paymentTermsDays === 'number' ? cfg.paymentTermsDays : 30;
             const invoiceDate = new Date();
             const dueDate = new Date(invoiceDate.getTime() + terms * 24 * 60 * 60 * 1000);
+
+            const cfgWritable: any = await ensureAppConfig();
+            const invoiceNo = buildInvoiceNo({ invoicePrefix: cfgWritable.invoicePrefix, nextInvoiceNumber: cfgWritable.nextInvoiceNumber });
             await InvoiceModel.create({
-              invoiceNo: genInvoiceNo(prefix),
+              invoiceNo,
               orderId: (order as any)._id,
               orderNo: (order as any).orderNo,
               customerId: (order as any).customerId,
@@ -660,6 +702,9 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
               items: (order as any).items || [],
               paymentTermsDays: terms,
             });
+
+            cfgWritable.nextInvoiceNumber = computeNextInvoiceNumber(String(cfgWritable.nextInvoiceNumber || '2024-00001'));
+            await cfgWritable.save();
           }
         }
       } catch {

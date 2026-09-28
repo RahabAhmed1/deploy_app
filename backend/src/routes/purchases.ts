@@ -21,13 +21,39 @@ function genPurchaseNo() {
 async function postPurchaseToStock(purchase: any) {
   const items = Array.isArray(purchase.items) ? purchase.items : [];
 
+  const purchaseNo = purchase?.purchaseNo ? String(purchase.purchaseNo) : '';
+
+  async function generateBatchNo(): Promise<string> {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const rand = Math.floor(Math.random() * 9000 + 1000);
+    const suffix = purchaseNo ? purchaseNo.split('-').slice(-1)[0] : '';
+    return `AUTO-${y}${m}${day}-${suffix || rand}`;
+  }
+
   // Create 'in' stock movements and increment product/batch stock
   for (const it of items) {
+    let batchNo = (it.batchNo || '').trim();
+    if (!batchNo) {
+      for (let i = 0; i < 5; i++) {
+        const candidate = await generateBatchNo();
+        const exists = await ProductBatchModel.exists({ productId: it.productId, batchNo: candidate });
+        if (!exists) {
+          batchNo = candidate;
+          break;
+        }
+      }
+      if (!batchNo) batchNo = `AUTO-${Date.now()}`;
+      it.batchNo = batchNo;
+    }
+
     await StockMovementModel.create({
       date: new Date(),
       productId: it.productId,
       productName: it.productName,
-      batchNo: it.batchNo,
+      batchNo,
       type: 'in',
       quantity: Number(it.quantity) || 0,
       reference: purchase.purchaseNo,
@@ -50,8 +76,8 @@ async function postPurchaseToStock(purchase: any) {
     }
 
     // Update or create batch stock
-    if (it.batchNo && String(it.batchNo).trim() !== '') {
-      const existing = await ProductBatchModel.findOne({ productId: it.productId, batchNo: String(it.batchNo).trim() });
+    if (batchNo && String(batchNo).trim() !== '') {
+      const existing = await ProductBatchModel.findOne({ productId: it.productId, batchNo: String(batchNo).trim() });
       if (existing) {
         existing.stockQuantity = Math.max(0, Number(existing.stockQuantity || 0) + Number(it.quantity || 0));
         if (typeof it.unitPrice === 'number' && it.unitPrice > 0) existing.purchasePrice = Number(it.unitPrice);
@@ -63,13 +89,19 @@ async function postPurchaseToStock(purchase: any) {
       } else {
         await ProductBatchModel.create({
           productId: it.productId,
-          batchNo: String(it.batchNo).trim(),
+          batchNo: String(batchNo).trim(),
           expiryDate: it.expiryDate ? new Date(it.expiryDate) : undefined,
           purchasePrice: typeof it.unitPrice === 'number' ? it.unitPrice : undefined,
           stockQuantity: Number(it.quantity) || 0,
         });
       }
     }
+  }
+
+  try {
+    purchase.markModified('items');
+    await purchase.save();
+  } catch {
   }
 }
 
@@ -88,6 +120,57 @@ router.get('/', async (req: Request, res: Response) => {
     ]);
     const paidMap = new Map<string, number>();
     for (const p of payments) paidMap.set(String(p._id), Number(p.paid || 0));
+
+    // Allocate general supplier payments (purchaseId is missing) across purchases for the same supplier.
+    const supplierIds = Array.from(new Set(docs.map((d: any) => (d.supplierId ? String(d.supplierId) : '')).filter(Boolean)));
+    if (supplierIds.length > 0) {
+      const genAgg = await SupplierPaymentModel.aggregate([
+        {
+          $match: {
+            supplierId: { $in: supplierIds },
+            $or: [{ purchaseId: { $exists: false } }, { purchaseId: null }],
+          },
+        },
+        { $group: { _id: '$supplierId', paid: { $sum: '$amount' } } },
+      ]);
+      const genBySupplier = new Map<string, number>();
+      for (const g of genAgg) genBySupplier.set(String(g._id), Number(g.paid || 0));
+
+      const bySupplier = new Map<string, any[]>();
+      for (const d of docs) {
+        const sid = d.supplierId ? String(d.supplierId) : '';
+        if (!sid) continue;
+        const arr = bySupplier.get(sid) || [];
+        arr.push(d);
+        bySupplier.set(sid, arr);
+      }
+
+      for (const [sid, list] of bySupplier.entries()) {
+        let remainingGeneral = Number(genBySupplier.get(sid) || 0);
+        if (remainingGeneral <= 0) continue;
+        const ordered = list
+          .slice()
+          .sort((a: any, b: any) => {
+            const ta = a.date ? new Date(a.date).getTime() : 0;
+            const tb = b.date ? new Date(b.date).getTime() : 0;
+            if (ta !== tb) return ta - tb;
+            const ca = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const cb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return ca - cb;
+          });
+
+        for (const pur of ordered) {
+          if (remainingGeneral <= 0) break;
+          const pid = String(pur._id);
+          const paidSpecific = Number(paidMap.get(pid) || 0);
+          const due = Math.max(0, Number(pur.netAmount || 0) - paidSpecific);
+          if (due <= 0) continue;
+          const apply = Math.min(due, remainingGeneral);
+          paidMap.set(pid, paidSpecific + apply);
+          remainingGeneral -= apply;
+        }
+      }
+    }
     const purchases = docs.map((d: any) => ({
       id: String(d._id),
       purchaseNo: d.purchaseNo,

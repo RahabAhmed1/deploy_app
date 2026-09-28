@@ -1,0 +1,46 @@
+## ── Deployment ───────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: pharmaflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          # CI/CD pipeline replaces this tag with the commit SHA
+          image: DOCKERHUB_USERNAME/pharmaflow-frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /nginx-health
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+## ── Service ──────────────────────────────────────────────────
+## NodePort for minikube (access via minikube service command)
+## Change type to LoadBalancer for cloud clusters
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: pharmaflow
+spec:
+  type: NodePort
+  selector:
+    app: frontend
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30080

@@ -1,0 +1,14 @@
+frontend command 
+
+npm i
+npm run dev
+
+backend command 
+npm i
+application 
+mongodb
+node js
+
+login details
+admin
+123

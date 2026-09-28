@@ -2,10 +2,16 @@ import { Router, type Request, type Response } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 import { DeliveryModel } from '../models/Delivery';
 import { OrderModel } from '../models/Order';
 import { UserModel } from '../models/User';
 import { createNotification } from '../notify';
+import { PaymentModel } from '../models/Payment';
+import { CustomerModel } from '../models/Customer';
+import { SupplierPaymentModel } from '../models/SupplierPayment';
+import { SupplierModel } from '../models/Supplier';
+import { PurchaseModel } from '../models/Purchase';
 
 const router = Router();
 
@@ -553,6 +559,119 @@ router.post('/:id/cash', async (req: Request, res: Response) => {
       }
     } else if (me.role !== 'admin' && me.role !== 'staff') {
       return res.status(403).json({ ok: false, error: 'Forbidden' });
+    }
+
+    const dtype = String(delivery.type || '');
+
+    // If cash is collected from customer for an order, treat it as a customer payment
+    if (dtype === 'admin_to_customer') {
+      const orderId = delivery.relatedOrderId ? String(delivery.relatedOrderId) : '';
+      const customerId = delivery.customerId ? String(delivery.customerId) : '';
+      if (orderId && customerId) {
+        const order: any = await OrderModel.findById(orderId);
+        const customer: any = await CustomerModel.findById(customerId);
+        if (order && customer) {
+          let existingPay: any = null;
+          let prevAmt = 0;
+          if (delivery.cashCustomerPaymentId) {
+            existingPay = await PaymentModel.findById(String(delivery.cashCustomerPaymentId));
+          }
+          if (existingPay) {
+            prevAmt = Number(existingPay.amount || 0);
+            existingPay.customerId = customer._id;
+            existingPay.customerName = customer.name;
+            existingPay.orderId = order._id;
+            existingPay.amount = amount;
+            existingPay.method = 'cash';
+            existingPay.status = 'completed';
+            existingPay.reference = existingPay.reference || `delivery:${String(id)}`;
+            await existingPay.save();
+          } else if (amount > 0) {
+            existingPay = await PaymentModel.create({
+              date: new Date(),
+              customerId: customer._id,
+              customerName: customer.name,
+              orderId: order._id,
+              amount,
+              method: 'cash',
+              reference: `delivery:${String(id)}`,
+              status: 'completed',
+            });
+            delivery.cashCustomerPaymentId = existingPay._id;
+          }
+
+          const delta = Number(amount) - Number(prevAmt);
+          if (delta !== 0) {
+            customer.outstandingBalance = Math.max(0, Number(customer.outstandingBalance || 0) - delta);
+            await customer.save();
+          }
+
+          const agg = await PaymentModel.aggregate([
+            { $match: { orderId: order._id } },
+            { $group: { _id: '$orderId', paid: { $sum: '$amount' } } },
+          ]);
+          const paid = Number(agg?.[0]?.paid || 0);
+          if (paid >= Number(order.netAmount || 0)) order.paymentStatus = 'paid';
+          else if (paid > 0) order.paymentStatus = 'partial';
+          else order.paymentStatus = 'unpaid';
+          await order.save();
+        }
+      }
+    }
+
+    // If cash is collected from admin for a supplier delivery, treat it as a supplier payment
+    if (dtype === 'supplier_to_admin') {
+      const supplierId = delivery.supplierId ? String(delivery.supplierId) : '';
+      if (supplierId) {
+        const supplier: any = await SupplierModel.findById(supplierId);
+        if (supplier) {
+          const purchaseId = delivery.relatedPurchaseId ? String(delivery.relatedPurchaseId) : '';
+          const purchaseObjId = purchaseId ? new mongoose.Types.ObjectId(purchaseId) : undefined;
+          let existingPay: any = null;
+          if (delivery.cashSupplierPaymentId) {
+            existingPay = await SupplierPaymentModel.findById(String(delivery.cashSupplierPaymentId));
+          }
+
+          if (purchaseId) {
+            const purchase: any = await PurchaseModel.findById(purchaseId);
+            if (purchase) {
+              const paidAgg = await SupplierPaymentModel.aggregate([
+                { $match: { purchaseId: purchase._id } },
+                { $group: { _id: '$purchaseId', paid: { $sum: '$amount' } } },
+              ]);
+              const paidSoFar = Number(paidAgg?.[0]?.paid || 0);
+              const already = existingPay ? Number(existingPay.amount || 0) : 0;
+              const remaining = Math.max(0, Number(purchase.netAmount || 0) - (paidSoFar - already));
+              if (amount > remaining) {
+                return res.status(400).json({ ok: false, error: `Amount exceeds remaining balance. Remaining: ${remaining}` });
+              }
+            }
+          }
+
+          if (existingPay) {
+            existingPay.supplierId = supplier._id;
+            existingPay.supplierName = supplier.name;
+            existingPay.purchaseId = purchaseObjId;
+            existingPay.amount = amount;
+            existingPay.method = 'cash';
+            existingPay.status = 'completed';
+            existingPay.reference = existingPay.reference || `delivery:${String(id)}`;
+            await existingPay.save();
+          } else if (amount > 0) {
+            const payDoc = await SupplierPaymentModel.create({
+              date: new Date(),
+              supplierId: supplier._id,
+              supplierName: supplier.name,
+              purchaseId: purchaseObjId,
+              amount,
+              method: 'cash',
+              reference: `delivery:${String(id)}`,
+              status: 'completed',
+            });
+            delivery.cashSupplierPaymentId = payDoc._id;
+          }
+        }
+      }
     }
 
     delivery.cashCollected = amount;
