@@ -17,7 +17,7 @@ spec:
       containers:
         - name: backend
           # CI/CD pipeline replaces this tag with the commit SHA
-          image: DOCKERHUB_USERNAME/pharmaflow-backend:latest
+          image: rahab123/pharmaflow-backend:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 5000

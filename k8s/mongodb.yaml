@@ -37,9 +37,10 @@ spec:
               mountPath: /data/db
           readinessProbe:
             exec:
-              command: ["mongosh", "--eval", "db.adminCommand('ping')"]
-            initialDelaySeconds: 10
-            periodSeconds: 5
+              command: ["mongosh", "--eval", "db.adminCommand('ping')", "--quiet"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 6
       volumes:
         - name: mongo-storage
           persistentVolumeClaim:
