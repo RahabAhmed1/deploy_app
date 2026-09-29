@@ -1,5 +1,8 @@
 const runtimeApiBase = (typeof window !== 'undefined' && (window as any)?.pharmaflow?.apiBaseUrl) as string | undefined;
-export const apiBaseUrl = runtimeApiBase || import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+// In Docker/K8s: VITE_API_BASE_URL is set to empty string, use relative URL (nginx proxies /api/*)
+// In Electron/local: falls back to localhost:5000
+const envApiBase = import.meta.env.VITE_API_BASE_URL;
+export const apiBaseUrl = runtimeApiBase || (envApiBase === '__RELATIVE__' ? '' : (envApiBase || 'http://localhost:5000'));
 
 function authHeaders(extra?: Record<string, string>) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;

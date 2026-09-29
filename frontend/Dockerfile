@@ -7,7 +7,8 @@ RUN npm ci --ignore-scripts
 
 COPY . .
 
-RUN VITE_API_BASE_URL="" npm run build --ignore-scripts
+# Empty string means use relative URLs - nginx will proxy /api/* to backend
+RUN VITE_API_BASE_URL="__RELATIVE__" npm run build --ignore-scripts
 
 # ── Serve with Nginx ──────────────────────────────────────────
 FROM nginx:1.27-alpine
