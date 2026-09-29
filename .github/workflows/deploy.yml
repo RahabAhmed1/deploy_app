@@ -11,7 +11,7 @@ env:
   FRONTEND_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/pharmaflow-frontend
 
 jobs:
-  # ── 1. Build & push Docker images ──────────────────────────
+  # ── Build & push Docker images ──────────────────────────
   build-and-push:
     name: Build & Push Images
     runs-on: ubuntu-latest
@@ -52,48 +52,3 @@ jobs:
             ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-  # ── 2. Deploy to Kubernetes ─────────────────────────────────
-  deploy:
-    name: Deploy to Kubernetes
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    # Only deploy on pushes to main (not PRs)
-    if: github.ref == 'refs/heads/main'
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
-        with:
-          version: 'latest'
-
-      - name: Configure kubeconfig
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
-
-      - name: Replace image placeholders with real values
-        run: |
-          sed -i "s|DOCKERHUB_USERNAME|${{ secrets.DOCKERHUB_USERNAME }}|g" k8s/backend.yaml k8s/frontend.yaml
-          sed -i "s|:latest|:${{ github.sha }}|g" k8s/backend.yaml k8s/frontend.yaml
-
-      - name: Apply Kubernetes manifests
-        run: |
-          kubectl apply -f k8s/namespace.yaml
-          kubectl apply -f k8s/secrets.yaml
-          kubectl apply -f k8s/uploads-pvc.yaml
-          kubectl apply -f k8s/mongodb.yaml
-          kubectl apply -f k8s/backend.yaml
-          kubectl apply -f k8s/frontend.yaml
-
-      - name: Wait for rollout to complete
-        run: |
-          kubectl rollout status deployment/mongodb  -n pharmaflow --timeout=120s
-          kubectl rollout status deployment/backend  -n pharmaflow --timeout=120s
-          kubectl rollout status deployment/frontend -n pharmaflow --timeout=120s
-
-      - name: Print pod status
-        run: kubectl get pods -n pharmaflow
