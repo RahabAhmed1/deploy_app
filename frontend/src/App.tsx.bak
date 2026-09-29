@@ -1,0 +1,95 @@
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, HashRouter, Routes, Route, Navigate } from "react-router-dom";
+import Dashboard from "./pages/Dashboard";
+import Products from "./pages/Products";
+import Orders from "./pages/Orders";
+import Customers from "./pages/Customers";
+import Suppliers from "./pages/Suppliers";
+import Inventory from "./pages/Inventory";
+import Payments from "./pages/Payments";
+import Invoices from "./pages/Invoices";
+import Returns from "./pages/Returns";
+import SupplierReturns from "./pages/SupplierReturns";
+import Purchases from "./pages/Purchases";
+import SalesReports from "./pages/SalesReports";
+import StockReports from "./pages/StockReports";
+import FinancialReports from "./pages/FinancialReports";
+import Settings from "./pages/Settings";
+import Ledger from "./pages/Ledger";
+import DailyPL from "./pages/DailyPL";
+import Expenses from "./pages/Expenses";
+import Login from "./pages/Login";
+import NotFound from "./pages/NotFound";
+import WalkIn from "./pages/WalkIn";
+import ProtectedRoute from "./components/routing/ProtectedRoute";
+
+const queryClient = new QueryClient();
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      {typeof window !== 'undefined' && (window as any).pharmaflow ? (
+        <HashRouter>
+          <Routes>
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/dashboard" element={<ProtectedRoute perm="view_dashboard"><Dashboard /></ProtectedRoute>} />
+            <Route path="/products" element={<ProtectedRoute perm="view_products"><Products /></ProtectedRoute>} />
+            <Route path="/inventory" element={<ProtectedRoute perm="view_inventory"><Inventory /></ProtectedRoute>} />
+            <Route path="/orders" element={<ProtectedRoute perm="view_orders"><Orders /></ProtectedRoute>} />
+            <Route path="/customers" element={<ProtectedRoute perm="view_customers"><Customers /></ProtectedRoute>} />
+            <Route path="/suppliers" element={<ProtectedRoute perm="view_suppliers"><Suppliers /></ProtectedRoute>} />
+            <Route path="/invoices" element={<ProtectedRoute perm="view_invoices"><Invoices /></ProtectedRoute>} />
+            <Route path="/payments" element={<ProtectedRoute perm="view_payments"><Payments /></ProtectedRoute>} />
+            <Route path="/expenses" element={<ProtectedRoute perm="view_expenses"><Expenses /></ProtectedRoute>} />
+            <Route path="/returns" element={<ProtectedRoute perm="view_returns"><Returns /></ProtectedRoute>} />
+            <Route path="/supplier-returns" element={<ProtectedRoute perm="view_returns"><SupplierReturns /></ProtectedRoute>} />
+            <Route path="/purchases" element={<ProtectedRoute perm="view_purchases"><Purchases /></ProtectedRoute>} />
+            <Route path="/ledger" element={<ProtectedRoute perm="view_ledger"><Ledger /></ProtectedRoute>} />
+            <Route path="/daily-pl" element={<ProtectedRoute perm="view_daily_pl"><DailyPL /></ProtectedRoute>} />
+            <Route path="/walk-in" element={<ProtectedRoute perm="view_walk_in"><WalkIn /></ProtectedRoute>} />
+            <Route path="/reports/sales" element={<ProtectedRoute perm="view_reports_sales"><SalesReports /></ProtectedRoute>} />
+            <Route path="/reports/stock" element={<ProtectedRoute perm="view_reports_stock"><StockReports /></ProtectedRoute>} />
+            <Route path="/reports/financial" element={<ProtectedRoute perm="view_reports_financial"><FinancialReports /></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute adminOnly><Settings /></ProtectedRoute>} />
+            <Route path="/login" element={<Login />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </HashRouter>
+      ) : (
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/dashboard" element={<ProtectedRoute perm="view_dashboard"><Dashboard /></ProtectedRoute>} />
+            <Route path="/products" element={<ProtectedRoute perm="view_products"><Products /></ProtectedRoute>} />
+            <Route path="/inventory" element={<ProtectedRoute perm="view_inventory"><Inventory /></ProtectedRoute>} />
+            <Route path="/orders" element={<ProtectedRoute perm="view_orders"><Orders /></ProtectedRoute>} />
+            <Route path="/customers" element={<ProtectedRoute perm="view_customers"><Customers /></ProtectedRoute>} />
+            <Route path="/suppliers" element={<ProtectedRoute perm="view_suppliers"><Suppliers /></ProtectedRoute>} />
+            <Route path="/invoices" element={<ProtectedRoute perm="view_invoices"><Invoices /></ProtectedRoute>} />
+            <Route path="/payments" element={<ProtectedRoute perm="view_payments"><Payments /></ProtectedRoute>} />
+            <Route path="/expenses" element={<ProtectedRoute perm="view_expenses"><Expenses /></ProtectedRoute>} />
+            <Route path="/returns" element={<ProtectedRoute perm="view_returns"><Returns /></ProtectedRoute>} />
+            <Route path="/supplier-returns" element={<ProtectedRoute perm="view_returns"><SupplierReturns /></ProtectedRoute>} />
+            <Route path="/purchases" element={<ProtectedRoute perm="view_purchases"><Purchases /></ProtectedRoute>} />
+            <Route path="/ledger" element={<ProtectedRoute perm="view_ledger"><Ledger /></ProtectedRoute>} />
+            <Route path="/daily-pl" element={<ProtectedRoute perm="view_daily_pl"><DailyPL /></ProtectedRoute>} />
+            <Route path="/walk-in" element={<ProtectedRoute perm="view_walk_in"><WalkIn /></ProtectedRoute>} />
+            <Route path="/reports/sales" element={<ProtectedRoute perm="view_reports_sales"><SalesReports /></ProtectedRoute>} />
+            <Route path="/reports/stock" element={<ProtectedRoute perm="view_reports_stock"><StockReports /></ProtectedRoute>} />
+            <Route path="/reports/financial" element={<ProtectedRoute perm="view_reports_financial"><FinancialReports /></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute adminOnly><Settings /></ProtectedRoute>} />
+            <Route path="/login" element={<Login />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      )}
+    </TooltipProvider>
+  </QueryClientProvider>
+);
+
+export default App;
