@@ -120,33 +120,32 @@ const LoginPage = () => {
     }, []);
 
     return (
-        <div className="min-h-screen w-full flex items-center justify-center overflow-hidden p-4 sm:p-0" style={{background: 'linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)'}}>
+        <div className="min-h-screen w-full flex items-center justify-center overflow-hidden bg-background p-4 sm:p-0">
             {/* Background Decorations */}
-            <div className="hidden sm:block absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full blur-[120px] pointer-events-none" style={{background: 'rgba(99,102,241,0.15)'}} />
-            <div className="hidden sm:block absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full blur-[120px] pointer-events-none" style={{background: 'rgba(139,92,246,0.2)'}} />
-            <div className="hidden sm:block absolute top-[30%] right-[10%] w-[20%] h-[20%] rounded-full blur-[80px] pointer-events-none" style={{background: 'rgba(59,130,246,0.15)'}} />
+            <div className="hidden sm:block absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-[120px] pointer-events-none" />
+            <div className="hidden sm:block absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
 
             <div className="w-full max-w-[440px] px-4 relative z-10">
                 {/* Logo Section */}
                 <div className="flex flex-col items-center mb-8">
-                    <div className="h-16 w-16 rounded-2xl flex items-center justify-center shadow-lg mb-4 animate-in fade-in zoom-in duration-700" style={{background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 8px 32px rgba(99,102,241,0.4)'}}>
+                    <div className="h-16 w-16 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20 mb-4 animate-in fade-in zoom-in duration-700">
                         <Pill className="h-10 w-10 text-white" />
                     </div>
-                    <h1 className="text-3xl font-bold tracking-tight text-white">PharmaFlow <span style={{color: '#a78bfa'}}>Pro</span></h1>
-                    <p className="mt-2 text-sm" style={{color: 'rgba(255,255,255,0.6)'}}>Nexus of Pharmaceutical Excellence</p>
+                    <h1 className="text-3xl font-bold tracking-tight text-foreground">PharmaFlow <span className="text-primary">Pro</span></h1>
+                    <p className="text-muted-foreground mt-2 text-sm">Nexus of Pharmaceutical Excellence</p>
                 </div>
 
-                <Card className="border-0 animate-in fade-in slide-in-from-bottom-8 duration-700 w-full" style={{background: 'rgba(255,255,255,0.07)', backdropFilter: 'blur(20px)', boxShadow: '0 25px 50px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)'}}>
+                <Card className="border-border/50 shadow-lg sm:shadow-2xl shadow-primary/10 backdrop-blur-sm bg-card/90 animate-in fade-in slide-in-from-bottom-8 duration-700 w-full">
                     <CardHeader className="space-y-1 pb-4">
-                        <CardTitle className="text-2xl text-center text-white">Welcome Back</CardTitle>
-                        <CardDescription className="text-center" style={{color: 'rgba(255,255,255,0.5)'}}>
+                        <CardTitle className="text-2xl text-center">Welcome Back</CardTitle>
+                        <CardDescription className="text-center">
                             Authorized access only. Please sign in to continue.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <form onSubmit={handleLogin} className="space-y-4">
                             <div className="space-y-2">
-                                <Label htmlFor="email" className="text-white/80">Email or Username</Label>
+                                <Label htmlFor="email">Email or Username</Label>
                                 <div className="relative">
                                     <Input
                                         id="email"
@@ -162,8 +161,8 @@ const LoginPage = () => {
                             </div>
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <Label htmlFor="password" className="text-white/80">Password</Label>
-                                    <a href="#" className="text-xs hover:underline font-medium" style={{color: '#a78bfa'}}>Forgot password?</a>
+                                    <Label htmlFor="password">Password</Label>
+                                    <a href="#" className="text-xs text-primary hover:underline font-medium">Forgot password?</a>
                                 </div>
                                 <div className="relative">
                                     <Input
@@ -187,15 +186,14 @@ const LoginPage = () => {
 
                             <div className="flex items-center space-x-2 py-2">
                                 <Switch id="remember" className="data-[state=checked]:bg-primary" />
-                                <Label htmlFor="remember" className="text-sm font-normal cursor-pointer" style={{color: 'rgba(255,255,255,0.6)'}}>
+                                <Label htmlFor="remember" className="text-sm font-normal text-muted-foreground cursor-pointer">
                                     Remember me for 30 days
                                 </Label>
                             </div>
 
                             <Button
                                 type="submit"
-                                className="w-full h-12 text-base font-semibold transition-all rounded-xl mt-2 text-white border-0"
-                                style={{background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 8px 24px rgba(99,102,241,0.4)'}}
+                                className="w-full h-12 text-base font-semibold transition-all rounded-xl shadow-lg shadow-primary/20 mt-2"
                                 disabled={isLoading}
                             >
                                 {isLoading ? (
@@ -211,15 +209,15 @@ const LoginPage = () => {
                             </Button>
                         </form>
                     </CardContent>
-                    <CardFooter className="flex flex-col border-t p-6 rounded-b-3xl" style={{borderColor: 'rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.03)'}}>
-                        <p className="text-xs sm:text-sm text-center" style={{color: 'rgba(255,255,255,0.4)'}}>
+                    <CardFooter className="flex flex-col border-t border-border p-6 bg-muted/20 rounded-b-3xl">
+                        <p className="text-xs sm:text-sm text-center text-muted-foreground">
                             Protected by industry-grade encryption.
                         </p>
                     </CardFooter>
                 </Card>
 
                 {/* Footer text */}
-                <div className="mt-8 text-center text-xs" style={{color: 'rgba(255,255,255,0.3)'}}>
+                <div className="mt-8 text-center text-xs text-muted-foreground/60">
                     &copy; 2024 PharmaFlow Pro. All rights reserved.
                 </div>
             </div>
